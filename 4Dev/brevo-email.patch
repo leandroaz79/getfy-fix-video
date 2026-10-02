@@ -1,0 +1,355 @@
+diff --git a/app/Http/Controllers/EmailTestController.php b/app/Http/Controllers/EmailTestController.php
+index 88e2ae56..cabdc47f 100644
+--- a/app/Http/Controllers/EmailTestController.php
++++ b/app/Http/Controllers/EmailTestController.php
+@@ -37,7 +37,7 @@ public function sendTest(Request $request)
+     {
+         $validated = $request->validate([
+             'test_to' => ['required', 'email'],
+-            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid'],
++            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid,brevo'],
+             'smtp_host' => ['nullable', 'string'],
+             'smtp_port' => ['nullable', 'string'],
+             'smtp_username' => ['nullable', 'string'],
+@@ -48,6 +48,10 @@ public function sendTest(Request $request)
+             'sendgrid_api_key' => ['nullable', 'string'],
+             'sendgrid_mail_from_address' => ['nullable', 'email', 'max:255'],
+             'sendgrid_mail_from_name' => ['nullable', 'string', 'max:255'],
++            'brevo_smtp_username' => ['nullable', 'string'],
++            'brevo_smtp_key' => ['nullable', 'string'],
++            'brevo_mail_from_address' => ['nullable', 'email', 'max:255'],
++            'brevo_mail_from_name' => ['nullable', 'string', 'max:255'],
+             'mail_from_address' => ['nullable', 'email', 'max:255'],
+             'mail_from_name' => ['nullable', 'string', 'max:255'],
+         ]);
+@@ -61,7 +65,7 @@ public function sendTest(Request $request)
+ 
+         try {
+             $appName = config('getfy.app_name');
+-            $body = "<p>Este é um e-mail de teste enviado por {$appName}.</p>";
++            $body = "<p>Este é um e‑mail de teste enviado por {$appName}.</p>";
+             Mail::mailer('smtp')->to($validated['test_to'])->send(new \App\Mail\TestEmail('E‑mail de teste - '.$appName, $body));
+             return response()->json(['success' => true]);
+         } catch (\Throwable $e) {
+@@ -74,7 +78,7 @@ public function connectionTest(Request $request)
+         $tenantId = auth()->user()->tenant_id;
+ 
+         $validated = $request->validate([
+-            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid'],
++            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid,brevo'],
+             'smtp_host' => ['nullable', 'string'],
+             'smtp_port' => ['nullable', 'string'],
+             'smtp_username' => ['nullable', 'string'],
+@@ -85,6 +89,10 @@ public function connectionTest(Request $request)
+             'sendgrid_api_key' => ['nullable', 'string'],
+             'sendgrid_mail_from_address' => ['nullable', 'email', 'max:255'],
+             'sendgrid_mail_from_name' => ['nullable', 'string', 'max:255'],
++            'brevo_smtp_username' => ['nullable', 'string'],
++            'brevo_smtp_key' => ['nullable', 'string'],
++            'brevo_mail_from_address' => ['nullable', 'email', 'max:255'],
++            'brevo_mail_from_name' => ['nullable', 'string', 'max:255'],
+             'mail_from_address' => ['nullable', 'email', 'max:255'],
+             'mail_from_name' => ['nullable', 'string', 'max:255'],
+         ]);
+@@ -107,7 +115,7 @@ public function connectionTest(Request $request)
+         }
+     }
+ 
+-    /** Build overrides for applyMailerConfig from request (smtp_* or hostinger_* or sendgrid_*). */
++    /** Build overrides for applyMailerConfig from request (smtp_* or hostinger_* or sendgrid_* or brevo_*). */
+     protected function buildMailOverridesFromRequest(array $validated, string $provider): array
+     {
+         $overrides = [];
+@@ -129,6 +137,19 @@ protected function buildMailOverridesFromRequest(array $validated, string $provi
+                 $overrides['smtp_password'] = $validated['hostinger_smtp_password'];
+             }
+             // host/port/encryption are fixed, no overrides
++        } elseif ($provider === 'brevo') {
++            if (! empty($validated['brevo_smtp_username'])) {
++                $overrides['brevo_smtp_username'] = $validated['brevo_smtp_username'];
++            }
++            if (! empty($validated['brevo_smtp_key'])) {
++                $overrides['brevo_smtp_key'] = $validated['brevo_smtp_key'];
++            }
++            if (! empty($validated['brevo_mail_from_address'])) {
++                $overrides['brevo_mail_from_address'] = $validated['brevo_mail_from_address'];
++            }
++            if (isset($validated['brevo_mail_from_name'])) {
++                $overrides['brevo_mail_from_name'] = $validated['brevo_mail_from_name'];
++            }
+         } else {
+             foreach (['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_encryption', 'mail_from_address', 'mail_from_name'] as $k) {
+                 if (isset($validated[$k]) && $validated[$k] !== null && $validated[$k] !== '') {
+diff --git a/app/Http/Controllers/SettingsController.php b/app/Http/Controllers/SettingsController.php
+index 021bfd35..fa4d02d9 100644
+--- a/app/Http/Controllers/SettingsController.php
++++ b/app/Http/Controllers/SettingsController.php
+@@ -109,6 +109,10 @@ public function index(): Response
+                 // SendGrid: do NOT expose sendgrid_api_key to the frontend
+                 'sendgrid_mail_from_address' => Setting::get('sendgrid_mail_from_address', config('mail.from.address', ''), $tenantId),
+                 'sendgrid_mail_from_name' => Setting::get('sendgrid_mail_from_name', config('mail.from.name', ''), $tenantId),
++                // Brevo: do NOT expose brevo_smtp_key to the frontend
++                'brevo_smtp_username' => Setting::get('brevo_smtp_username', '', $tenantId),
++                'brevo_mail_from_address' => Setting::get('brevo_mail_from_address', config('mail.from.address', ''), $tenantId),
++                'brevo_mail_from_name' => Setting::get('brevo_mail_from_name', config('mail.from.name', ''), $tenantId),
+                 'checkout_translations' => $checkoutTranslations,
+                 'currencies' => $currencies,
+                 'storage_provider' => $effectiveStorageProvider,
+@@ -125,7 +129,7 @@ public function index(): Response
+     public function update(Request $request)
+     {
+         $validated = $request->validate([
+-            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid'],
++            'email_provider' => ['nullable', 'string', 'in:smtp,hostinger,sendgrid,brevo'],
+             'smtp_password' => ['nullable', 'string', 'max:255'],
+             'mail_from_address' => ['nullable', 'email', 'max:255'],
+             'mail_from_name' => ['nullable', 'string', 'max:255'],
+@@ -142,6 +146,10 @@ public function update(Request $request)
+             'sendgrid_api_key' => ['nullable', 'string', 'max:512'],
+             'sendgrid_mail_from_address' => ['nullable', 'email', 'max:255'],
+             'sendgrid_mail_from_name' => ['nullable', 'string', 'max:255'],
++            'brevo_smtp_username' => ['nullable', 'string', 'max:255'],
++            'brevo_smtp_key' => ['nullable', 'string', 'max:512'],
++            'brevo_mail_from_address' => ['nullable', 'email', 'max:255'],
++            'brevo_mail_from_name' => ['nullable', 'string', 'max:255'],
+             'checkout_translations' => ['nullable', 'array'],
+             'checkout_translations.pt_BR' => ['nullable', 'array'],
+             'checkout_translations.en' => ['nullable', 'array'],
+@@ -166,6 +174,7 @@ public function update(Request $request)
+             'mail_from_address', 'mail_from_name', 'reply_to',
+             'hostinger_smtp_username', 'hostinger_mail_from_address', 'hostinger_mail_from_name', 'hostinger_reply_to',
+             'sendgrid_mail_from_address', 'sendgrid_mail_from_name',
++            'brevo_smtp_username', 'brevo_mail_from_address', 'brevo_mail_from_name',
+         ];
+         $alwaysSetKeys = ['email_provider'];
+         $brandingKeys = ['theme_primary', 'app_name', 'app_logo', 'app_logo_dark', 'app_logo_icon', 'app_logo_icon_dark'];
+@@ -179,6 +188,9 @@ public function update(Request $request)
+         if (array_key_exists('sendgrid_api_key', $validated) && $validated['sendgrid_api_key'] !== null && $validated['sendgrid_api_key'] !== '') {
+             Setting::set('sendgrid_api_key', encrypt($validated['sendgrid_api_key']), $tenantId);
+         }
++        if (array_key_exists('brevo_smtp_key', $validated) && $validated['brevo_smtp_key'] !== null && $validated['brevo_smtp_key'] !== '') {
++            Setting::set('brevo_smtp_key', encrypt($validated['brevo_smtp_key']), $tenantId);
++        }
+         if (array_key_exists('storage_s3_secret', $validated) && $validated['storage_s3_secret'] !== null && $validated['storage_s3_secret'] !== '') {
+             Setting::set('storage_s3_secret', Crypt::encryptString($validated['storage_s3_secret']), $tenantId);
+         }
+@@ -191,7 +203,7 @@ public function update(Request $request)
+             ?? Setting::get('storage_provider', 'local', $tenantId);
+ 
+         foreach ($validated as $key => $value) {
+-            if (in_array($key, ['smtp_password', 'hostinger_smtp_password', 'sendgrid_api_key', 'storage_s3_secret'], true)) {
++            if (in_array($key, ['smtp_password', 'hostinger_smtp_password', 'sendgrid_api_key', 'brevo_smtp_key', 'storage_s3_secret'], true)) {
+                 continue;
+             }
+             if (in_array($key, $brandingKeys, true)) {
+diff --git a/app/Services/TenantMailConfigService.php b/app/Services/TenantMailConfigService.php
+index 85611a1e..b2da0ea1 100644
+--- a/app/Services/TenantMailConfigService.php
++++ b/app/Services/TenantMailConfigService.php
+@@ -30,6 +30,14 @@ public function isEmailConfigured(?int $tenantId): bool
+                 return true;
+             }
+         }
++        $brevoUser = Setting::get('brevo_smtp_username', '', $tenantId);
++        if ($brevoUser !== null && $brevoUser !== '') {
++            $encrypted = Setting::get('brevo_smtp_key', null, $tenantId);
++            $key = $encrypted ? @decrypt($encrypted) : null;
++            if ($key !== null && $key !== '') {
++                return true;
++            }
++        }
+         return false;
+     }
+ 
+@@ -64,6 +72,18 @@ public function getMailConfigForProvider(?int $tenantId, array $overrides, strin
+             }
+             return ['host' => $host, 'port' => $port, 'encryption' => $encryption, 'username' => $username, 'password' => $password];
+         }
++        if ($provider === 'brevo') {
++            $host = 'smtp-relay.brevo.com';
++            $port = 587;
++            $encryption = 'tls';
++            $username = $overrides['brevo_smtp_username'] ?? Setting::get('brevo_smtp_username', '', $tenantId);
++            $password = $overrides['brevo_smtp_key'] ?? null;
++            if ($password === null) {
++                $encrypted = Setting::get('brevo_smtp_key', null, $tenantId);
++                $password = $encrypted ? @decrypt($encrypted) : null;
++            }
++            return ['host' => $host, 'port' => $port, 'encryption' => $encryption, 'username' => $username, 'password' => $password];
++        }
+         $host = $overrides['smtp_host'] ?? Setting::get('smtp_host', config('mail.mailers.smtp.host'), $tenantId);
+         $port = (int) ($overrides['smtp_port'] ?? Setting::get('smtp_port', config('mail.mailers.smtp.port'), $tenantId));
+         $encryption = $overrides['smtp_encryption'] ?? Setting::get('smtp_encryption', config('mail.mailers.smtp.encryption'), $tenantId);
+@@ -112,7 +132,7 @@ public function resolveTenantIdForMail(?int $tenantId): ?int
+             return $row->tenant_id;
+         }
+         $row = Setting::query()
+-            ->whereIn('key', ['hostinger_smtp_username', 'sendgrid_api_key'])
++            ->whereIn('key', ['hostinger_smtp_username', 'sendgrid_api_key', 'brevo_smtp_username'])
+             ->whereNotNull('value')
+             ->where('value', '!=', '')
+             ->orderBy('tenant_id')
+@@ -145,6 +165,13 @@ public function applyMailerConfigForTenant(?int $tenantId, array $overrides = []
+             }
+             $fromName = Setting::get('hostinger_mail_from_name', config('mail.from.name'), $tenantId);
+             $replyTo = Setting::get('hostinger_reply_to', null, $tenantId);
++        } elseif ($provider === 'brevo') {
++            $brevoFrom = $overrides['brevo_mail_from_address'] ?? Setting::get('brevo_mail_from_address', '', $tenantId);
++            if ($brevoFrom !== null && $brevoFrom !== '') {
++                $fromAddress = $brevoFrom;
++            }
++            $fromName = $overrides['brevo_mail_from_name'] ?? Setting::get('brevo_mail_from_name', config('mail.from.name'), $tenantId);
++            $replyTo = null;
+         } else {
+             $smtpFrom = $overrides['mail_from_address'] ?? Setting::get('mail_from_address', '', $tenantId);
+             if ($smtpFrom !== null && $smtpFrom !== '') {
+diff --git a/resources/js/Pages/Settings/Index.vue b/resources/js/Pages/Settings/Index.vue
+index e7cac1dd..2a4979de 100644
+--- a/resources/js/Pages/Settings/Index.vue
++++ b/resources/js/Pages/Settings/Index.vue
+@@ -158,6 +158,10 @@ const form = useForm({
+     sendgrid_api_key: '', // never pre-fill API key
+     sendgrid_mail_from_address: props.settings.sendgrid_mail_from_address ?? '',
+     sendgrid_mail_from_name: props.settings.sendgrid_mail_from_name ?? '',
++    brevo_smtp_username: props.settings.brevo_smtp_username ?? '',
++    brevo_smtp_key: '', // never pre-fill key
++    brevo_mail_from_address: props.settings.brevo_mail_from_address ?? '',
++    brevo_mail_from_name: props.settings.brevo_mail_from_name ?? '',
+     checkout_translations: defaultTranslations(),
+     currencies: defaultCurrencies(),
+     storage_provider: props.settings.storage_provider ?? 'local',
+@@ -484,6 +488,11 @@ async function testConnection() {
+         payload.sendgrid_api_key = form.sendgrid_api_key;
+         payload.sendgrid_mail_from_address = form.sendgrid_mail_from_address;
+         payload.sendgrid_mail_from_name = form.sendgrid_mail_from_name;
++    } else if (provider === 'brevo') {
++        payload.brevo_smtp_username = form.brevo_smtp_username;
++        payload.brevo_smtp_key = form.brevo_smtp_key;
++        payload.brevo_mail_from_address = form.brevo_mail_from_address;
++        payload.brevo_mail_from_name = form.brevo_mail_from_name;
+     } else {
+         payload.smtp_host = form.smtp_host;
+         payload.smtp_port = form.smtp_port;
+@@ -523,6 +532,11 @@ async function sendTestEmail() {
+         payload.sendgrid_api_key = form.sendgrid_api_key;
+         payload.sendgrid_mail_from_address = form.sendgrid_mail_from_address;
+         payload.sendgrid_mail_from_name = form.sendgrid_mail_from_name;
++    } else if (provider === 'brevo') {
++        payload.brevo_smtp_username = form.brevo_smtp_username;
++        payload.brevo_smtp_key = form.brevo_smtp_key;
++        payload.brevo_mail_from_address = form.brevo_mail_from_address;
++        payload.brevo_mail_from_name = form.brevo_mail_from_name;
+     } else {
+         payload.smtp_host = form.smtp_host;
+         payload.smtp_port = form.smtp_port;
+@@ -714,6 +728,13 @@ const providers = [
+         logo: '/images/integrations/twillio-sendgrid.jpg',
+         description: 'Envio via API Key SendGrid',
+     },
++    {
++        id: 'brevo',
++        title: 'Brevo',
++        logo: '/images/integrations/brevo.svg',
++        description: 'Envio via SMTP Brevo',
++        defaults: { smtp_host: 'smtp-relay.brevo.com', smtp_port: '587', smtp_encryption: 'tls' },
++    },
+ ];
+ 
+ const selectedProviderId = ref(form.email_provider || 'smtp');
+@@ -751,6 +772,9 @@ function isProviderConfigured(providerId) {
+     if (providerId === 'sendgrid') {
+         return !!form.sendgrid_mail_from_address;
+     }
++    if (providerId === 'brevo') {
++        return !!form.brevo_smtp_username;
++    }
+     return false;
+ }
+ 
+diff --git a/resources/js/components/EmailProviderSidebar.vue b/resources/js/components/EmailProviderSidebar.vue
+index f13e6acb..411d610f 100644
+--- a/resources/js/components/EmailProviderSidebar.vue
++++ b/resources/js/components/EmailProviderSidebar.vue
+@@ -33,6 +33,7 @@ function handleSendTest() {
+ 
+ const hasFixedDefaults = computed(() => !!props.provider?.defaults);
+ const isSendGrid = computed(() => props.provider?.id === 'sendgrid');
++const isBrevo = computed(() => props.provider?.id === 'brevo');
+ 
+ const inputClass =
+     'block w-full rounded-xl border-2 border-zinc-200 bg-white px-4 py-2.5 text-zinc-900 placeholder-zinc-400 transition focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500';
+@@ -117,8 +118,55 @@ const fixedValueClass =
+           </section>
+         </template>
+ 
++        <!-- Brevo: SMTP com credenciais -->
++        <template v-else-if="isBrevo">
++          <section class="space-y-4">
++            <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Configuração Brevo</h3>
++            <p class="text-sm text-zinc-500 dark:text-zinc-400">
++              Obtenha as credenciais SMTP em <a href="https://app.brevo.com/settings/keys/smtp" target="_blank" rel="noopener noreferrer" class="text-[var(--color-primary)] underline">Brevo &gt; Configurações &gt; Chaves SMTP</a>.
++            </p>
++            <div class="grid gap-4 sm:grid-cols-2">
++              <div>
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Host</label>
++                <div :class="fixedValueClass">smtp-relay.brevo.com</div>
++              </div>
++              <div>
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Porta</label>
++                <div :class="fixedValueClass">587</div>
++              </div>
++              <div class="sm:col-span-2">
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Criptografia</label>
++                <div :class="fixedValueClass">TLS</div>
++              </div>
++              <div class="sm:col-span-2">
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">E-mail de login SMTP</label>
++                <input v-model="form.brevo_smtp_username" type="email" :class="inputClass" placeholder="seu@email.com" />
++              </div>
++              <div class="sm:col-span-2">
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Chave SMTP (deixe em branco para manter)</label>
++                <input v-model="form.brevo_smtp_key" type="password" autocomplete="new-password" :class="inputClass" placeholder="xsmtpsib-..." />
++              </div>
++            </div>
++          </section>
++
++          <section class="space-y-4">
++            <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remetente</h3>
++            <div class="space-y-4">
++              <div>
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">E-mail do remetente</label>
++                <input v-model="form.brevo_mail_from_address" type="email" :class="inputClass" placeholder="noreply@seudominio.com" />
++                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">O remetente deve estar verificado no Brevo (Transacional &gt; Remetentes).</p>
++              </div>
++              <div>
++                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nome do remetente</label>
++                <input v-model="form.brevo_mail_from_name" type="text" :class="inputClass" placeholder="Ex: Minha Loja" />
++              </div>
++            </div>
++          </section>
++        </template>
++
+         <!-- SMTP Configuration (Hostinger ou SMTP genérico) -->
+-        <section v-else class="space-y-4">
++        <section v-else-if="!isBrevo" class="space-y-4">
+           <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Configurações SMTP</h3>
+           
+           <div class="grid gap-4 sm:grid-cols-2">
+@@ -174,7 +222,7 @@ const fixedValueClass =
+         </section>
+ 
+         <!-- Remetente: Hostinger usa o e-mail do usuário SMTP; SMTP genérico permite e-mail separado -->
+-        <section v-if="!isSendGrid && hasFixedDefaults" class="space-y-4">
++        <section v-if="!isSendGrid && !isBrevo && hasFixedDefaults" class="space-y-4">
+           <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remetente (nome)</h3>
+           <p class="text-sm text-zinc-500 dark:text-zinc-400">O e-mail do remetente é o mesmo do usuário SMTP acima. Defina apenas o nome exibido:</p>
+           <div>
+@@ -183,7 +231,7 @@ const fixedValueClass =
+           </div>
+         </section>
+ 
+-        <section v-if="!isSendGrid && !hasFixedDefaults" class="space-y-4">
++        <section v-if="!isSendGrid && !isBrevo && !hasFixedDefaults" class="space-y-4">
+           <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remetente</h3>
+           <div class="space-y-4">
+             <div>
