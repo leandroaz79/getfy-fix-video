@@ -232,7 +232,7 @@ function submit() {
                     {{ appName }}
                 </p>
                 <p class="mt-2 text-2xl font-semibold leading-snug text-white">
-                    Sua plataforma para vender mais.
+                    Mude a sua vida e de sua família.
                 </p>
                 <p class="mt-2 text-base leading-relaxed text-white/80">
                     Estude com o RDC.
