@@ -235,7 +235,7 @@ function submit() {
                     Sua plataforma para vender mais.
                 </p>
                 <p class="mt-2 text-base leading-relaxed text-white/80">
-                    Feita para quem escala de verdade.
+                    Estude com o RDC.
                 </p>
             </div>
         </div>
